@@ -139,10 +139,7 @@ func ProcessAndUploadFile(wg *sync.WaitGroup, fileheader *multipart.FileHeader, 
 	r := uuid.String()
 	fmt.Println("uuid", r)
 
-	mu := sync.Mutex{}
-	mu.Lock()
 	response <- r
-	mu.Unlock()
 
 	fmt.Println("6")
 }
