@@ -43,66 +43,31 @@ func Upload(c *gin.Context) {
 		file1, file2,
 	}
 
+	response := make(chan string)
+	errChan := make(chan error)
+
 	for _, v := range files {
 		wg.Add(1)
 		//new go routines
+		go ProcessAndUploadFile(&wg, v, response, errChan)
 	}
 
 	wg.Wait()
+	close(response)
 
-	uuid := uuid.New()
-	fileName := uuid.String()
-	folderPath := storageLocation + "/" + fileName
-	filePath := storageLocation + "/" + fileName + "/" + "video.mp4"
-
-	err = os.MkdirAll(folderPath, 0755)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "failed to crate directory to store files",
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	newFile, err := os.Create(filePath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "failed to create file to copy video file",
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	defer newFile.Close()
-
-	src, err := file.Open()
-	if err != nil {
+	select {
+	case err := <-errChan:
 		c.JSON(http.StatusCreated, gin.H{
-			"message": "couldnt open the file",
-			"error":   err.Error(),
+			"message": err,
 		})
 		return
-	}
-
-	written, err := io.Copy(newFile, src)
-	if err != nil {
+	default:
+		a := <-response
+		b := <-response
 		c.JSON(http.StatusCreated, gin.H{
-			"message":       "error while copying file",
-			"bytes copyied": written,
-			"error":         err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusCreated, gin.H{
-		"message":  "successfully uploaded file to server",
-		"video_id": uuid,
-	})
-
-	err = CreatePlaylistAndSegments(filePath, folderPath)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "failed to create segments and playlist",
-			"error":   err.Error(),
+			"message":   "successfully uploaded file to server",
+			"video_id":  a,
+			"video2_id": b,
 		})
 		return
 	}
@@ -129,4 +94,55 @@ func CreatePlaylistAndSegments(filePath string, folderPath string) error {
 	}
 
 	return nil
+}
+
+func ProcessAndUploadFile(wg *sync.WaitGroup, fileheader *multipart.FileHeader, response chan string, errChan chan error) {
+	defer wg.Done()
+	uuid := uuid.New()
+	fileName := uuid.String()
+	folderPath := storageLocation + "/" + fileName
+	filePath := storageLocation + "/" + fileName + "/" + "video.mp4"
+	fmt.Println("1")
+
+	err := os.MkdirAll(folderPath, 0755)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	fmt.Println(2)
+	newFile, err := os.Create(filePath)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	defer newFile.Close()
+
+	src, err := fileheader.Open()
+	if err != nil {
+		errChan <- err
+		return
+	}
+	fmt.Println(3)
+	_, err = io.Copy(newFile, src)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	fmt.Println(4)
+	err = CreatePlaylistAndSegments(filePath, folderPath)
+	if err != nil {
+		errChan <- err
+		return
+	}
+	fmt.Println("5")
+	r := uuid.String()
+	fmt.Println("uuid", r)
+
+	mu := sync.Mutex{}
+	mu.Lock()
+	response <- r
+	mu.Unlock()
+
+	fmt.Println("6")
 }
