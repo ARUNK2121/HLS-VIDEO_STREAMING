@@ -43,8 +43,8 @@ func Upload(c *gin.Context) {
 		file1, file2,
 	}
 
-	response := make(chan string)
-	errChan := make(chan error)
+	response := make(chan string, 2)
+	errChan := make(chan error, 2)
 
 	for _, v := range files {
 		wg.Add(1)
@@ -75,6 +75,7 @@ func Upload(c *gin.Context) {
 }
 
 func CreatePlaylistAndSegments(filePath string, folderPath string) error {
+
 	segmentDuration := 3
 	ffmpegCmd := exec.Command(
 		"ffmpeg",
@@ -93,6 +94,7 @@ func CreatePlaylistAndSegments(filePath string, folderPath string) error {
 		return fmt.Errorf("failed to create HLS: %v \nOutput: %s ", err, output)
 	}
 
+	fmt.Println("cpas completed and returned nil")
 	return nil
 }
 
@@ -142,4 +144,5 @@ func ProcessAndUploadFile(wg *sync.WaitGroup, fileheader *multipart.FileHeader, 
 	response <- r
 
 	fmt.Println("6")
+
 }
